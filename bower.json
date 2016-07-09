@@ -1,0 +1,25 @@
+{
+  "name": "leaf",
+  "main": "leaf.js",
+  "homepage": "https://github.com/volkovasystems/leaf",
+  "authors": [
+    "Richeve S. Bebedor <richeve.bebedor@gmail.com>"
+  ],
+  "description": "Create pages.",
+  "keywords": [
+    "page",
+    "page-manager",
+    "leaf"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "harden": "^0.3.2"
+  }
+}
