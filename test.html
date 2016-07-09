@@ -1,0 +1,23 @@
+<html>
+	<head>
+	</head>
+	<body>
+		<script src="./bower_components/harden/harden.js" type="application/javascript"></script>
+		<script src="../nimo/nimo.js" type="application/javascript" onload="nimo.boot( )"></script>
+		<script src="leaf.js" type="application/javascript" onload="leaf.boot( )"></script>
+		<script>
+			nimo( "user" );
+			nimo( "merchant" );
+			nimo( "store" );
+			nimo( "item" );
+			nimo( "stock" );
+
+			leaf( {
+				"name": "add-user",
+				"group": "user"
+			} );
+
+			leaf.transfer( "add-user", "merchant" );
+		</script>
+	</body>
+</html>
