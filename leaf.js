@@ -55,6 +55,9 @@
 		A page can be transferred between groups.
 
 		Pages follow certain order in a group.
+
+		This module assumes that pages will be placed
+			inside section elements classed as views.
 	@end-module-documentation
 
 	@include:
@@ -69,6 +72,9 @@ if( typeof window != "undefined" &&
 {
 	throw new Error( "harden is not defined" );
 }
+
+harden( "MAXIMUM_PAGE_LEVEL", 2147483647 );
+harden( "MAXIMUM_PAGE_INDEX", 2147483647 );
 
 /*:
 	@option:
@@ -95,13 +101,14 @@ var leaf = function leaf( option ){
 		throw new Error( "leaf is not loaded properly" );
 	}
 
-	if( typeof option == "string" &&
-		option in leaf.page )
+	var parameter = arguments[ 0 ];
+	if( typeof parameter == "string" &&
+		parameter in leaf.page )
 	{
-		return leaf.page[ option ];
+		return leaf.page[ parameter ];
 
-	}else if( typeof option == "string" ){
-		option = { "name": option };
+	}else if( typeof parameter == "string" ){
+		option = { "name": parameter };
 
 	}else{
 		option = option || { };
@@ -112,36 +119,45 @@ var leaf = function leaf( option ){
 		throw new Error( "name not specified" );
 	}
 
+	var group = option.group || "root";
+
+	var view = document.querySelector( "section.view." + group );
+	if( !view ){
+		throw new Error( "view does not exists" );
+	}
+
+	if( document.querySelector( "section.view." + group + " > div.page." + name ) ){
+		throw new Error( "page is already in the view" );
+	}
+
+	if( !( group in leaf.group ) ){
+		harden( group, leaf.group[ group ] || { }, leaf.group );
+	}
+
+	if( leaf.group[ group ][ name ] ){
+		throw new Error( "page is already in the given group" );
+	}
+
+	if( !( group in leaf.data.group ) ){
+		harden( group, leaf.data.group[ group ] || { }, leaf.data.group );
+	}
+
 	var page = document.createElement( "div" );
 	page.classList.add( "page" );
 
 	page.setAttribute( "name", name );
 	page.classList.add( name );
 
-	var group = option.group || "root";
-
-	var view = document.querySelector( "section." + group );
-	if( !view ){
-		throw new Error( "view does not exists" );
-	}
-
-	if( document.querySelector( "section." + group + " > div." + name ) ){
-		throw new Error( "page is already in the given group" );
-	}
-
 	page.setAttribute( "group", group );
 	page.classList.add( group );
 
-	leaf.group[ group ] = leaf.group[ group ] || { };
-	leaf.data.group[ group ] = leaf.data.group[ group ] || { };
-
-	if( leaf.group[ group ][ name ] ){
-		throw new Error( "page is already in the given group" );
+	var level = option.level;
+	if( level > MAXIMUM_PAGE_LEVEL ){
+		throw new Error( "maximum page level" );
 	}
-
 	leaf.resolveGroup( {
 		"group": group,
-		"level": option.level,
+		"level": level,
 		"name": name,
 		"page": page
 	} );
@@ -159,7 +175,9 @@ var leaf = function leaf( option ){
 		"padding: 0px;",
 		"margin: 0px;",
 
-		"float: none;"
+		"float: none;",
+
+		"pointer-events: none;"
 	].join( " " ) );
 
 	page.classList.add( "hidden" );
@@ -171,14 +189,15 @@ var leaf = function leaf( option ){
 	return page;
 };
 
-harden( "data", leaf.data || { }, leaf );
-
 /*:
 	This will be the collection of pages.
 
 	No indexes will be on this page.
 */
 harden( "page", leaf.page || { }, leaf );
+
+harden( "data", leaf.data || { }, leaf );
+harden( "group", leaf.data.group || { }, leaf.data );
 
 /*:
 	This will be a collection of page groups.
@@ -193,13 +212,15 @@ harden( "page", leaf.page || { }, leaf );
 */
 harden( "group", leaf.group || { }, leaf );
 
+/*:
+	This will be the group when the page is not given any group.
+
+	This will be the root view or group.
+*/
+harden( "root", leaf.group.root || { }, leaf.group );
+
 harden( "boot",
 	function boot( ){
-		//: This will be the group when the page is not given any group.
-		harden( "root", leaf.group.root || { }, leaf.group );
-
-		harden( "group", leaf.data.group || { }, leaf.data );
-
 		if( !document.querySelector( "style.root" ) ){
 			var style = document.createElement( "style" );
 
@@ -227,7 +248,9 @@ harden( "boot",
 				"width": "0px !important",
 				"height": "0px !important",
 
-				"opacity": "hidden !important"
+				"opacity": "hidden !important",
+
+				"pointer-events": "none !important"
 			} )
 			.replace( /\,/g, ";" )
 			.replace( /\"/g, "" ), 0 );
@@ -241,7 +264,9 @@ harden( "boot",
 				"padding": "0px !important",
 				"margin": "0px !important",
 
-				"float": "none !important"
+				"float": "none !important",
+
+				"pointer-events": "none !important"
 			} )
 			.replace( /\,/g, ";" )
 			.replace( /\"/g, "" ), 0 );
@@ -255,16 +280,35 @@ harden( "boot",
 		return leaf;
 	}, leaf );
 
+/*:
+	@method-documentation:
+		Show the page and re-assign the z-index.
+	@end-method-documentation
+*/
 harden( "show",
 	function show( name ){
+		if( !name ){
+			throw new Error( "name not specified" );
+		}
+
 		if( name in leaf.page ){
 			var page = leaf.page[ name ];
 
 			var group = page.getAttribute( "group" );
 
+			var view = document.querySelector( "section.view." + group );
+			if( !view ){
+				throw new Error( "view does not exists" );
+			}
+
 			page.classList.remove( "hidden" );
 
 			var level = parseInt( page.getAttribute( "level" ) );
+			var viewLevel = parseInt( view.getAttribute( "level" ) );
+			level = viewLevel * level;
+			if( level > MAXIMUM_PAGE_LEVEL ){
+				throw new Error( "maximum page level" );
+			}
 			page.style.zIndex = level;
 
 		}else{
@@ -274,8 +318,17 @@ harden( "show",
 		return leaf;
 	}, leaf );
 
+/*:
+	@method-documentation:
+		Hides the page.
+	@end-method-documentation
+*/
 harden( "hide",
 	function hide( name ){
+		if( !name ){
+			throw new Error( "name not specified" );
+		}
+
 		if( name in leaf.page ){
 			leaf.page[ name ].classList.add( "hidden" );
 
@@ -287,51 +340,70 @@ harden( "hide",
 	}, leaf );
 
 /*:
-	We separated the complicated procedure of resolving the group index.
+	@method-documentation:
+		We separated the complicated procedure of resolving the group index.
+
+		You may suggest a particular group index but this will check and resolve
+			the best index for you.
+	@end-method-documentation
+
+	@option:
+		{
+			"name": "string",
+			"group": "string",
+			"page": "HTMLElement",
+			"index": "number",
+			"level": "level"
+		}
+	@end-option
 */
 harden( "resolveGroup",
 	function resolveGroup( option ){
 		var name = option.name;
-
 		if( !name ){
 			throw new Error( "name not specified" );
 		}
 
-		var group = option.group;
+		var group = option.group || "root";
 
-		if( !group ){
-			throw new Error( "group not specified" );
+		var view = document.querySelector( "section.view." + group );
+		if( !view ){
+			throw new Error( "view does not exists" );
 		}
 
-		leaf.group[ group ] = leaf.group[ group ] || { };
+		if( !( group in leaf.group ) ){
+			harden( group, leaf.group[ group ] || { }, leaf.group );
+		}
+
+		if( !( group in leaf.data.group ) ){
+			harden( group, leaf.data.group[ group ] || { }, leaf.data.group );
+		}
 
 		var page = option.page || leaf.group[ group ][ name ] || leaf.page[ name ];
-
 		if( !page ){
 			throw new Error( "page not specified" );
 		}
-
-		leaf.data.group[ group ] = leaf.data.group[ group ] || { };
 
 		/*:
 			This is the current count of the pages in the group from zero.
 			This may represent the current count of pages in the group.
 		*/
-		var groupIndex = leaf.data.group[ group ].index || 0;
+		var groupIndex = option.index || leaf.data.group[ group ].index || 0;
+		if( groupIndex > MAXIMUM_PAGE_INDEX ){
+			throw new Error( "maximum group index" );
+		}
+
 		/*:
 			This is the stationary high value index and
 				does not represent the curent count of the pages in a group.
 		*/
 		var lastIndex = leaf.data.group[ group ].last || 0;
 
-		var level = option.level || groupIndex
-		page.setAttribute( "level", level );
-
-		var viewLevel = parseInt( document.querySelector( "section." + group )
-			.getAttribute( "level" ) ) || 0;
-		page.style.zIndex = viewLevel * level;
-
 		//: The given level overrides the current group index.
+		var level = option.level || groupIndex;
+		if( level > MAXIMUM_PAGE_LEVEL ){
+			throw new Error( "maximum page level" );
+		}
 		groupIndex = level;
 
 		//: The last index may be the group index but it will change because of the given level.
@@ -343,12 +415,17 @@ harden( "resolveGroup",
 		while( leaf.group[ group ][ index ] ){
 			index++;
 		}
+		if( index > MAXIMUM_PAGE_INDEX ){
+			throw new Error( "maximum group last index" );
+		}
 		/*:
 			The last index may not be the last one based on the registered pages in the group.
 
 			This will confuse anyone in the future, we did this because
 				we will never know what is the last index. It is safe to assume
 				that the last index can be at the last space or/and with the highest value.
+
+			We will be temporarily placing last index as the last non occupied index.
 		*/
 		if( lastIndex > index ){
 			lastIndex = index;
@@ -361,6 +438,22 @@ harden( "resolveGroup",
 				lastIndex == groupIndex )
 			{
 				lastIndex++;
+
+			//: If the group index and last index is occupied then move both one index.
+			}else if( leaf.group[ group ][ groupIndex ] &&
+				leaf.group[ group ][ lastIndex ] &&
+				lastIndex != groupIndex )
+			{
+				groupIndex++;
+				lastIndex++;
+			}
+
+			if( groupIndex > MAXIMUM_PAGE_INDEX ){
+				throw new Error( "group is full" );
+			}
+
+			if( lastIndex > MAXIMUM_PAGE_INDEX ){
+				throw new Error( "group is full" );
 			}
 
 			/*:
@@ -377,6 +470,12 @@ harden( "resolveGroup",
 			}
 		}
 
+		level = groupIndex;
+		page.setAttribute( "level", level );
+
+		var viewLevel = parseInt( view.getAttribute( "level" ) ) || 0;
+		page.style.zIndex = viewLevel * level;
+
 		leaf.group[ group ][ name ] = page;
 		leaf.group[ group ][ groupIndex ] = page;
 		page.setAttribute( "index", groupIndex );
@@ -386,6 +485,9 @@ harden( "resolveGroup",
 			index++;
 		}
 		//: The current group index must be empty.
+		if( index > MAXIMUM_PAGE_INDEX ){
+			throw new Error( "maximum group index" );
+		}
 		leaf.data.group[ group ].index = index;
 
 		var nextIndex = 0;
@@ -400,6 +502,9 @@ harden( "resolveGroup",
 					nextIndex = index;
 				}
 			} );
+		if( nextIndex > MAXIMUM_PAGE_INDEX ){
+			throw new Error( "maximum group last index" );
+		}
 		//: The highest value index is the last index.
 		leaf.data.group[ group ].last = nextIndex;
 
@@ -413,7 +518,7 @@ harden( "cascade",
 	function cascade( group ){
 		group = group || "root";
 
-		var view = document.querySelector( "section." + group );
+		var view = document.querySelector( "section.view." + group );
 		if( !view ){
 			throw new Error( "view does not exists" );
 		}
@@ -437,14 +542,20 @@ harden( "cascade",
 				page.setAttribute( "index", index );
 
 				var viewLevel = parseInt( view.getAttribute( "level" ) );
-				page.style.zIndex = viewLevel * index;
+				var level = viewLevel * index;
+				if( level > MAXIMUM_PAGE_LEVEL ){
+					throw new Error( "maximum page level" );
+				}
+				page.style.zIndex = level;
 			} );
 
 		return leaf;
 	}, leaf );
 
 /*:
-	Remove the page from the group.
+	@method-documentation:
+		Remove the page from the group.
+	@end-method-documentation
 */
 harden( "tear",
 	function tear( name, group ){
@@ -452,29 +563,33 @@ harden( "tear",
 			throw new Error( "name not specified" );
 		}
 
-		var page = leaf.page[ name ];
-
-		if( !page ){
-			throw new Error( "page does not exists" );
-		}
-
 		group = group || "root";
 
-		var view = document.querySelector( "section." + group );
+		var view = document.querySelector( "section.view." + group );
 		if( !view ){
 			throw new Error( "view does not exists" );
 		}
 
-		//: Ensure that the given group is the same with the current page group.
-		var _group = page.getAttribute( "group" );
-		if( group != _group &&
-			document.querySelector( "section." + _group + " > div." + name ) )
-		{
-			group = _group;
+		var page = leaf.page[ name ];
+		if( !page ){
+			throw new Error( "page does not exists" );
 		}
 
-		if( !document.querySelector( "section." + group + " > div." + name ) ){
-			throw new Error( "page is not in the given group" );
+		//: Ensure that the given group is the same with the current page group.
+		var oldGroup = page.getAttribute( "group" );
+		if( group != oldGroup &&
+			document.querySelector( "section.view." + oldGroup + " > div.page." + name ) &&
+			!document.querySelector( "section.view." + group + " > div.page." + name ) )
+		{
+			group = oldGroup;
+		}
+
+		if( !document.querySelector( "section.view." + group + " > div.page." + name ) ){
+			throw new Error( "page is not in the view" );
+		}
+
+		if( !( group in leaf.group ) ){
+			harden( group, leaf.group[ group ] || { }, leaf.group );
 		}
 
 		leaf.cascade( group );
@@ -496,7 +611,9 @@ harden( "tear",
 	}, leaf );
 
 /*:
-	Add the page to the group.
+	@method-documentation:
+		Add the page to the group.
+	@end-method-documentation
 */
 harden( "tape",
 	function tape( name, group ){
@@ -504,35 +621,39 @@ harden( "tape",
 			throw new Error( "name not specified" );
 		}
 
-		var page = leaf.page[ name ];
-
-		if( !page ){
-			throw new Error( "page does not exists" );
-		}
-
 		group = group || "root";
 
-		var view = document.querySelector( "section." + group );
+		var view = document.querySelector( "section.view." + group );
 		if( !view ){
 			throw new Error( "view does not exists" );
 		}
 
+		var page = leaf.page[ name ];
+		if( !page ){
+			throw new Error( "page does not exists" );
+		}
+
 		//: Ensure that the page is not yet in the group
-		var _group = page.getAttribute( "group" );
-		if( _group ){
+		var oldGroup = page.getAttribute( "group" );
+		if( oldGroup ){
 			throw new Error( "page is not yet torn" );
 		}
 
-		if( _group &&
-			( group == _group ||
-			document.querySelector( "section." + group + " > div." + name ) ||
-			document.querySelector( "section." + _group + " > div." + name ) ) )
+		if( oldGroup &&
+			( group == oldGroup ||
+			document.querySelector( "section.view." + group + " > div.page." + name ) ||
+			document.querySelector( "section.view." + oldGroup + " > div.page." + name ) ) )
 		{
 			throw new Error( "page is already in the given group" );
 		}
 
-		leaf.group[ group ] = leaf.group[ group ] || { };
-		leaf.data.group[ group ] = leaf.data.group[ group ] || { };
+		if( !( group in leaf.group ) ){
+			harden( group, leaf.group[ group ] || { }, leaf.group );
+		}
+
+		if( !( group in leaf.data.group ) ){
+			harden( group, leaf.data.group[ group ] || { }, leaf.data.group );
+		}
 
 		if( leaf.group[ group ][ name ] ){
 			throw new Error( "page is already in the given group" );
@@ -557,7 +678,9 @@ harden( "tape",
 	}, leaf );
 
 /*:
-	Tear and tape the page to another group.
+	@method-documentation:
+		Tear and tape the page to another group.
+	@end-method-documentation
 */
 harden( "transfer",
 	function transfer( name, group ){
@@ -567,13 +690,12 @@ harden( "transfer",
 
 		group = group || "root";
 
-		var view = document.querySelector( "section." + group );
+		var view = document.querySelector( "section.view." + group );
 		if( !view ){
 			throw new Error( "view does not exists" );
 		}
 
 		var page = leaf.page[ name ];
-
 		if( !page ){
 			throw new Error( "page does not exists" );
 		}
